@@ -82,13 +82,8 @@ def train(args):
     ## 디렉토리 생성하기
     result_dir_train = os.path.join(result_dir, 'train')
 
-    # if not os.path.exists(result_dir_train):
-    #     os.makedirs(os.path.join(result_dir_train, 'png', 'a2b'))
-    #     os.makedirs(os.path.join(result_dir_train, 'png', 'b2a'))
-
     ## 네트워크 학습하기
     if mode == 'train':
-        step = 0
 
         def loader_train(transform):
             dataset_train = datasets.ImageFolder(data_dir,transform=transform)
@@ -108,32 +103,39 @@ def train(args):
             for img, label in loader_train:
                 yield img, label
 
-        dataset_train = sample_data(loader_train,4*2**step)
+        def requires_grad(model, flag=True):
+            for p in model.parameters():
+                p.requires_grad = flag
+
+        def accumulate(model1, model2, decay=0.999):
+            par1 = dict(model1.named_parameters())
+            par2 = dict(model2.named_parameters())
+
+            for k in par1.keys():
+                par1[k].data.mul_(decay).add_(1-decay, par2[k].data)
 
         # 그밖에 부수적인 variables 설정하기
-        # num_data_train = len(dataset_train)    왜 얘안되냐
+        # num_data_train = len(datasㅅet_train)    왜 얘안되냐
         # num_batch_train = np.ceil(num_data_train / batch_size)
 
     ## 네트워크 생성하기
     if network == "PGGAN":
+        netG = PGGAN().to(device)
         netG_a2b = CycleGAN(in_channels=nch, out_channels=nch, nker=nker, norm=norm, nblk=9).to(device)
-        netG_b2a = CycleGAN(in_channels=nch, out_channels=nch, nker=nker, norm=norm, nblk=9).to(device)
+
+        netD = Discriminator(n_label).to(device)
+        netG_running = PGGAN().to(device)
+        netG_running.train(False)
 
         init_weights(netD_a, init_type='normal', init_gain=0.02)
-        init_weights(netD_b, init_type='normal', init_gain=0.02)
 
     ## 손실함수 정의하기
     class_loss = nn.CrossEntropyLoss()
 
     ## Optimizer 설정하기
-    optimG = torch.optim.Adam(netG_a2b.parameters(), lr=lr, betas=(0.5, 0.999))
-    optimD = torch.optim.Adam(netD_a.parameters(), lr=lr, betas=(0.5, 0.999))
+    optimG = torch.optim.Adam(netG.parameters(), lr=lr, betas=(0.5, 0.999))
+    optimD = torch.optim.Adam(netD.parameters(), lr=lr, betas=(0.5, 0.999))
 
-    ## 그밖에 부수적인 functions 설정하기
-    fn_tonumpy = lambda x: x.to('cpu').detach().numpy().transpose(0, 2, 3, 1)
-    fn_denorm = lambda x: (x * STD) + MEAN
-
-    cmap = None
 
     ## Tensorboard 를 사용하기 위한 SummaryWriter 설정
     writer_train = SummaryWriter(log_dir=os.path.join(log_dir, 'train'))
@@ -152,19 +154,19 @@ def train(args):
                                             optimG=optimG, optimD=optimD)
 
         for epoch in range(st_epoch + 1, num_epoch + 1):
-            netG_a2b.train()
-            netG_b2a.train()
-            netD_a.train()
-            netD_b.train()
 
-            loss_G_a2b_train = []
-            loss_G_b2a_train = []
-            loss_D_a_train = []
-            loss_D_b_train = []
-            loss_cycle_a_train = []
-            loss_cycle_b_train = []
-            loss_ident_a_train = []
-            loss_ident_b_train = []
+            dataset_train = sample_data(loader_train, 4 * 2 ** (epoch-1))
+
+            requires_grad(netG,False)
+            requires_grad(netD,True)
+
+            # 위랑 같은건가? requires랑 train()이랑
+            # netG_a2b.train()
+            # netD_b.train()
+
+            loss_G_train = []
+            loss_D_train = []
+            loss_grad_train = []
 
             for batch, data in enumerate(loader_train, 1):
                 input_a = data['data_a'].to(device)
