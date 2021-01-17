@@ -1,12 +1,10 @@
-import torch.distributed as dist
-
-##
-
 import os
 import numpy as np
+from PIL import Image
 
 import torch
 import torch.nn as nn
+from torch.autograd import Variable, grad
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
@@ -17,7 +15,7 @@ from util import *
 import itertools
 import matplotlib.pyplot as plt
 
-from torchvision import transforms
+from torchvision import datasets, transforms, utils
 
 MEAN = 0.5
 STD = 0.5
@@ -26,6 +24,11 @@ NUM_WORKER = 0
 
 
 def train(args):
+    ## PGGAN
+    n_label = 1
+    code_size = 512 - n_label
+    n_critic = 1 # 얘 지워도 되지 않나?
+
     ## 트레이닝 파라메터 설정하기
     mode = args.mode
     train_continue = args.train_continue
@@ -79,48 +82,52 @@ def train(args):
     ## 디렉토리 생성하기
     result_dir_train = os.path.join(result_dir, 'train')
 
-    if not os.path.exists(result_dir_train):
-        os.makedirs(os.path.join(result_dir_train, 'png', 'a2b'))
-        os.makedirs(os.path.join(result_dir_train, 'png', 'b2a'))
+    # if not os.path.exists(result_dir_train):
+    #     os.makedirs(os.path.join(result_dir_train, 'png', 'a2b'))
+    #     os.makedirs(os.path.join(result_dir_train, 'png', 'b2a'))
 
     ## 네트워크 학습하기
     if mode == 'train':
-        transform_train = transforms.Compose([Resize(shape=(286, 286, nch)),
-                                              RandomCrop((ny, nx)),
-                                              Normalization(mean=MEAN, std=STD)])
+        step = 0
 
-        dataset_train = Dataset(data_dir=os.path.join(data_dir, 'train'),
-                                transform=transform_train,
-                                task=task, data_type='both')
-        loader_train = DataLoader(dataset_train, batch_size=batch_size,
-                                  shuffle=True, num_workers=NUM_WORKER)
+        def loader_train(transform):
+            dataset_train = datasets.ImageFolder(data_dir,transform=transform)
+            loader_train = DataLoader(dataset_train, shuffle=True, batch_size=batch_size, num_workers=NUM_WORKER)
+            return loader_train
+
+        def sample_data(loader_train, image_size=4):
+            transform = transforms.Compose([
+                transforms.Resize(image_size),
+                transforms.CenterCrop(image_size),
+                transforms.ToTensor(),
+                transforms.Normalization(mean=MEAN, std=STD)
+            ])
+
+            loader_train = loader_train(transform)
+
+            for img, label in loader_train:
+                yield img, label
+
+        dataset_train = sample_data(loader_train,4*2**step)
 
         # 그밖에 부수적인 variables 설정하기
-        num_data_train = len(dataset_train)
-        num_batch_train = np.ceil(num_data_train / batch_size)
+        # num_data_train = len(dataset_train)    왜 얘안되냐
+        # num_batch_train = np.ceil(num_data_train / batch_size)
 
     ## 네트워크 생성하기
-    if network == "CycleGAN":
+    if network == "PGGAN":
         netG_a2b = CycleGAN(in_channels=nch, out_channels=nch, nker=nker, norm=norm, nblk=9).to(device)
         netG_b2a = CycleGAN(in_channels=nch, out_channels=nch, nker=nker, norm=norm, nblk=9).to(device)
-
-        netD_a = Discriminator(in_channels=nch, out_channels=1, nker=nker, norm=norm).to(device)
-        netD_b = Discriminator(in_channels=nch, out_channels=1, nker=nker, norm=norm).to(device)
-
-        init_weights(netG_a2b, init_type='normal', init_gain=0.02)
-        init_weights(netG_b2a, init_type='normal', init_gain=0.02)
 
         init_weights(netD_a, init_type='normal', init_gain=0.02)
         init_weights(netD_b, init_type='normal', init_gain=0.02)
 
     ## 손실함수 정의하기
-    fn_cycle = nn.L1Loss().to(device)
-    fn_gan = nn.BCELoss().to(device)
-    fn_ident = nn.L1Loss().to(device)
+    class_loss = nn.CrossEntropyLoss()
 
     ## Optimizer 설정하기
-    optimG = torch.optim.Adam(itertools.chain(netG_a2b.parameters(), netG_b2a.parameters()), lr=lr, betas=(0.5, 0.999))
-    optimD = torch.optim.Adam(itertools.chain(netD_a.parameters(), netD_b.parameters()), lr=lr, betas=(0.5, 0.999))
+    optimG = torch.optim.Adam(netG_a2b.parameters(), lr=lr, betas=(0.5, 0.999))
+    optimD = torch.optim.Adam(netD_a.parameters(), lr=lr, betas=(0.5, 0.999))
 
     ## 그밖에 부수적인 functions 설정하기
     fn_tonumpy = lambda x: x.to('cpu').detach().numpy().transpose(0, 2, 3, 1)

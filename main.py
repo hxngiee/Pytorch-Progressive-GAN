@@ -1,4 +1,3 @@
-
 ## 라이브러리 추가하기
 import argparse
 
@@ -11,11 +10,11 @@ parser = argparse.ArgumentParser(description="CycleGAN",
 parser.add_argument("--mode", default="train", choices=["train", "test"], type=str, dest="mode")
 parser.add_argument("--train_continue", default="on", choices=["on", "off"], type=str, dest="train_continue")
 
-parser.add_argument("--lr", default=2e-4, type=float, dest="lr")
-parser.add_argument("--batch_size", default=8, type=int, dest="batch_size")
+parser.add_argument("--lr", default=1e-3, type=float, dest="lr")
+parser.add_argument("--batch_size", default=16, type=int, dest="batch_size")
 parser.add_argument("--num_epoch", default=100, type=int, dest="num_epoch")
 
-parser.add_argument("--data_dir", default="./datasets/cezanne2photo", type=str, dest="data_dir")
+parser.add_argument("--data_dir", default="./datasets/celeba", type=str, dest="data_dir")
 parser.add_argument("--ckpt_dir", default="./checkpoint", type=str, dest="ckpt_dir")
 parser.add_argument("--log_dir", default="./log", type=str, dest="log_dir")
 parser.add_argument("--result_dir", default="./result", type=str, dest="result_dir")
@@ -33,7 +32,7 @@ parser.add_argument("--wgt_cycle", default=1e1, type=float, dest="wgt_cycle")
 parser.add_argument("--wgt_ident", default=5e-1, type=float, dest="wgt_ident")
 parser.add_argument("--norm", default='inorm', type=str, dest="norm")
 
-parser.add_argument("--network", default="CycleGAN", choices=['DCGAN', 'pix2pix', 'CycleGAN'], type=str, dest="network")
+parser.add_argument("--network", default="PGGAN", choices=['DCGAN', 'pix2pix', 'CycleGAN','PGGAN'], type=str, dest="network")
 parser.add_argument("--learning_type", default="plain", choices=["plain", "residual"], type=str, dest="learning_type")
 
 args = parser.parse_args()
