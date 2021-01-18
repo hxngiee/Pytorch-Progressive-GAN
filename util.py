@@ -70,10 +70,10 @@ def save(ckpt_dir, netG_a2b, netG_b2a, netD_a, netD_b, optimG, optimD, epoch):
                "%s/model_epoch%d.pth" % (ckpt_dir, epoch))
 
 ## 네트워크 불러오기
-def load(ckpt_dir, netG_a2b, netG_b2a, netD_a, netD_b, optimG, optimD):
+def load(ckpt_dir, netG, netD, optimG, optimD):
     if not os.path.exists(ckpt_dir):
         epoch = 0
-        return netG_a2b, netG_b2a, netD_a, netD_b, optimG, optimD, epoch
+        return netG, netD, optimG, optimD, epoch
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -83,15 +83,14 @@ def load(ckpt_dir, netG_a2b, netG_b2a, netD_a, netD_b, optimG, optimD):
 
     dict_model = torch.load('%s/%s' % (ckpt_dir, ckpt_lst[-1]), map_location=device)
 
-    netG_a2b.load_state_dict(dict_model['netG_a2b'])
-    netG_b2a.load_state_dict(dict_model['netG_b2a'])
-    netD_a.load_state_dict(dict_model['netD_a'])
-    netD_b.load_state_dict(dict_model['netD_b'])
+    ## 뭐라 저장했지?
+    netG.load_state_dict(dict_model['netG'])
+    netD.load_state_dict(dict_model['netD'])
     optimG.load_state_dict(dict_model['optimG'])
     optimD.load_state_dict(dict_model['optimD'])
     epoch = int(ckpt_lst[-1].split('epoch')[1].split('.pth')[0])
 
-    return netG_a2b, netG_b2a, netD_a, netD_b, optimG, optimD, epoch
+    return netG, netD, optimG, optimD, epoch
 
 ## Add Sampling
 def add_sampling(img, type="random", opts=None):

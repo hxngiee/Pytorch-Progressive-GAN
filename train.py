@@ -120,14 +120,12 @@ def train(args):
 
     ## 네트워크 생성하기
     if network == "PGGAN":
-        netG = PGGAN().to(device)
-        netG_a2b = CycleGAN(in_channels=nch, out_channels=nch, nker=nker, norm=norm, nblk=9).to(device)
+        netG = PGGAN(code_size,n_label).to(device)
+        # netG_a2b = CycleGAN(in_channels=nch, out_channels=nch, nker=nker, norm=norm, nblk=9).to(device)
 
         netD = Discriminator(n_label).to(device)
-        netG_running = PGGAN().to(device)
+        netG_running = PGGAN(code_size,n_label).to(device)
         netG_running.train(False)
-
-        init_weights(netD_a, init_type='normal', init_gain=0.02)
 
     ## 손실함수 정의하기
     class_loss = nn.CrossEntropyLoss()
@@ -142,31 +140,49 @@ def train(args):
 
     ## 네트워크 학습시키기
     st_epoch = 0
+    step = 0
+    iteration = 0
+
+    dataset_train = sample_data(loader_train, 4 * 2 ** (step))
+
+    requires_grad(netG, False)
+    requires_grad(netD, True)
+
+    loss_G_train = []
+    loss_D_train = []
+    loss_grad_train = []
+
+    alpha = 0
+    one = torch.tensor(1,dtype=torch.float).to(device)
+    mone = one * -1
+    stabilize = False
 
     # TRAIN MODE
     if mode == 'train':
         if train_continue == "on":
-            netG_a2b, netG_b2a, \
-            netD_a, netD_b, \
+            netG, netD, \
             optimG, optimD, st_epoch = load(ckpt_dir=ckpt_dir,
-                                            netG_a2b=netG_a2b, netG_b2a=netG_b2a,
-                                            netD_a=netD_a, netD_b=netD_b,
+                                            netG=netG, netD=netD,
                                             optimG=optimG, optimD=optimD)
 
         for epoch in range(st_epoch + 1, num_epoch + 1):
 
-            dataset_train = sample_data(loader_train, 4 * 2 ** (epoch-1))
+            netG.train()
+            netD.train()
 
-            requires_grad(netG,False)
-            requires_grad(netD,True)
+            netD.zero_grad()
+            alpha = min(1, 2e-5 * epoch)
 
-            # 위랑 같은건가? requires랑 train()이랑
-            # netG_a2b.train()
-            # netD_b.train()
+            if stabilize is False and iteration > 50000:
+                dataset_train = sample_data(loader_train,4 * 2 ** step)
+                stabilize = True
 
-            loss_G_train = []
-            loss_D_train = []
-            loss_grad_train = []
+            if iteration > 100000:
+                alpha = 0
+                iteration = 0
+                step += 1
+                stabilize = False
+
 
             for batch, data in enumerate(loader_train, 1):
                 input_a = data['data_a'].to(device)
@@ -296,8 +312,7 @@ def train(args):
 
             if epoch % 2 == 0 or epoch == num_epoch:
                 save(ckpt_dir=ckpt_dir, epoch=epoch,
-                     netG_a2b=netG_a2b, netG_b2a=netG_b2a,
-                     netD_a=netD_a, netD_b=netD_b,
+                     netG=netG, netD=netD,
                      optimG=optimG, optimD=optimD)
 
         writer_train.close()

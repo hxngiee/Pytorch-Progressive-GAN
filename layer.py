@@ -1,125 +1,187 @@
-import os
-import numpy as np
-
 import torch
-import torch.nn as nn
+
+from torch import nn
+from torch.nn import init
+from torch.nn import functional as F
+from torch.autograd import Variable
+
+from math import sqrt
 
 
-class DECBR2d(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1, bias=True, norm="bnorm", relu=0.0):
+def init_linear(linear):
+    init.xavier_normal(linear.weight)
+    linear.bias.data.zero_()
+
+
+def init_conv(conv, glu=True):
+    init.kaiming_normal(conv.weight)
+    if conv.bias is not None:
+        conv.bias.data.zero_()
+
+
+class SpectralNorm:
+    def __init__(self, name):
+        self.name = name
+
+    def compute_weight(self, module):
+        weight = getattr(module, self.name + '_orig')
+        u = getattr(module, self.name + '_u')
+        size = weight.size()
+        weight_mat = weight.contiguous().view(size[0], -1)
+        if weight_mat.is_cuda:
+            u = u.cuda()
+        v = weight_mat.t() @ u
+        v = v / v.norm()
+        u = weight_mat @ v
+        u = u / u.norm()
+        weight_sn = weight_mat / (u.t() @ weight_mat @ v)
+        weight_sn = weight_sn.view(*size)
+
+        return weight_sn, Variable(u.data)
+
+    @staticmethod
+    def apply(module, name):
+        fn = SpectralNorm(name)
+
+        weight = getattr(module, name)
+        del module._parameters[name]
+        module.register_parameter(name + '_orig', nn.Parameter(weight.data))
+        input_size = weight.size(0)
+        u = Variable(torch.randn(input_size, 1) * 0.1, requires_grad=False)
+        setattr(module, name + '_u', u)
+        setattr(module, name, fn.compute_weight(module)[0])
+
+        module.register_forward_pre_hook(fn)
+
+        return fn
+
+    def __call__(self, module, input):
+        weight_sn, u = self.compute_weight(module)
+        setattr(module, self.name, weight_sn)
+        setattr(module, self.name + '_u', u)
+
+
+def spectral_norm(module, name='weight'):
+    SpectralNorm.apply(module, name)
+
+    return module
+
+
+class EqualLR:
+    def __init__(self, name):
+        self.name = name
+
+    def compute_weight(self, module):
+        weight = getattr(module, self.name + '_orig')
+        fan_in = weight.data.size(1) * weight.data[0][0].numel()
+
+        return weight * sqrt(2 / fan_in)
+
+    @staticmethod
+    def apply(module, name):
+        fn = EqualLR(name)
+
+        weight = getattr(module, name)
+        del module._parameters[name]
+        module.register_parameter(name + '_orig', nn.Parameter(weight.data))
+        module.register_forward_pre_hook(fn)
+
+        return fn
+
+    def __call__(self, module, input):
+        weight = self.compute_weight(module)
+        setattr(module, self.name, weight)
+
+
+def equal_lr(module, name='weight'):
+    EqualLR.apply(module, name)
+
+    return module
+
+
+class PixelNorm(nn.Module):
+    def __init__(self):
         super().__init__()
 
-        layers = []
-        # layers += [nn.ReflectionPad2d(padding=padding)]
-        layers += [nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels,
-                                      kernel_size=kernel_size, stride=stride, padding=padding, output_padding=output_padding,
-                                      bias=bias)]
-
-        if not norm is None:
-            if norm == "bnorm":
-                layers += [nn.BatchNorm2d(num_features=out_channels)]
-            elif norm == "inorm":
-                layers += [nn.InstanceNorm2d(num_features=out_channels)]
-
-        if not relu is None and relu >= 0.0:
-            layers += [nn.ReLU() if relu == 0 else nn.LeakyReLU(relu)]
-
-        self.cbr = nn.Sequential(*layers)
-
-    def forward(self, x):
-        return self.cbr(x)
+    def forward(self, input):
+        return input / torch.sqrt(torch.mean(input ** 2, dim=1, keepdim=True)
+                                  + 1e-8)
 
 
-class CBR2d(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, padding_mode='reflection', bias=True, norm="bnorm", relu=0.0):
+class SpectralNormConv2d(nn.Module):
+    def __init__(self, *args, **kwargs):
         super().__init__()
 
-        layers = []
+        conv = nn.Conv2d(*args, **kwargs)
+        init.kaiming_normal(conv.weight)
+        conv.bias.data.zero_()
+        self.conv = spectral_norm(conv)
 
-        if padding_mode == 'reflection':
-            layers += [nn.ReflectionPad2d(padding)]
-        elif padding_mode == 'replication':
-            layers += [nn.ReplicationPad2d(padding)]
-        elif padding_mode == 'constant':
-            value = 0
-            layers += [nn.ConstantPad2d(padding, value)]
-        elif padding_mode == 'zeros':
-            layers += [nn.ZeroPad2d(padding)]
-
-        layers += [nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                             kernel_size=kernel_size, stride=stride, padding=0,
-                             bias=bias)]
-
-        if not norm is None:
-            if norm == "bnorm":
-                layers += [nn.BatchNorm2d(num_features=out_channels)]
-            elif norm == "inorm":
-                layers += [nn.InstanceNorm2d(num_features=out_channels)]
-
-        if not relu is None and relu >= 0.0:
-            layers += [nn.ReLU() if relu == 0 else nn.LeakyReLU(relu)]
-
-        self.cbr = nn.Sequential(*layers)
-
-    def forward(self, x):
-        return self.cbr(x)
+    def forward(self, input):
+        return self.conv(input)
 
 
-class ResBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=True, norm="bnorm", relu=0.0):
+class EqualConv2d(nn.Module):
+    def __init__(self, *args, **kwargs):
         super().__init__()
 
-        layers = []
+        conv = nn.Conv2d(*args, **kwargs)
+        conv.weight.data.normal_()
+        conv.bias.data.zero_()
+        self.conv = equal_lr(conv)
 
-        # 1st conv
-        layers += [CBR2d(in_channels=in_channels, out_channels=out_channels,
-                         kernel_size=kernel_size, stride=stride, padding=padding,
-                         bias=bias, norm=norm, relu=relu)]
-
-        # 2nd conv
-        layers += [CBR2d(in_channels=out_channels, out_channels=out_channels,
-                         kernel_size=kernel_size, stride=stride, padding=padding,
-                         bias=bias, norm=norm, relu=None)]
-
-        self.resblk = nn.Sequential(*layers)
-
-    def forward(self, x):
-        return x + self.resblk(x)
+    def forward(self, input):
+        return self.conv(input)
 
 
-class PixelUnshuffle(nn.Module):
-    def __init__(self, ry=2, rx=2):
+class ConvBlock(nn.Module):
+    def __init__(self, in_channel, out_channel, kernel_size,
+                 padding,
+                 kernel_size2=None, padding2=None,
+                 pixel_norm=True, spectral_norm=False):
         super().__init__()
-        self.ry = ry
-        self.rx = rx
 
-    def forward(self, x):
-        ry = self.ry
-        rx = self.rx
+        pad1 = padding
+        pad2 = padding
+        if padding2 is not None:
+            pad2 = padding2
 
-        [B, C, H, W] = list(x.shape)
+        kernel1 = kernel_size
+        kernel2 = kernel_size
+        if kernel_size2 is not None:
+            kernel2 = kernel_size2
 
-        x = x.reshape(B, C, H // ry, ry, W // rx, rx)
-        x = x.permute(0, 1, 3, 5, 2, 4)
-        x = x.reshape(B, C * (ry * rx), H // ry, W // rx)
+        if spectral_norm:
+            self.conv = nn.Sequential(SpectralNormConv2d(in_channel,
+                                                         out_channel, kernel1,
+                                                         padding=pad1),
+                                      nn.LeakyReLU(0.2),
+                                      SpectralNormConv2d(out_channel,
+                                                         out_channel, kernel2,
+                                                         padding=pad2),
+                                      nn.LeakyReLU(0.2))
 
-        return x
+        else:
+            if pixel_norm:
+                self.conv = nn.Sequential(EqualConv2d(in_channel, out_channel,
+                                                      kernel1, padding=pad1),
+                                          PixelNorm(),
+                                          nn.LeakyReLU(0.2),
+                                          EqualConv2d(out_channel, out_channel,
+                                                      kernel2, padding=pad2),
+                                          PixelNorm(),
+                                          nn.LeakyReLU(0.2))
 
+            else:
+                self.conv = nn.Sequential(EqualConv2d(in_channel, out_channel,
+                                                      kernel1, padding=pad1),
+                                          nn.LeakyReLU(0.2),
+                                          EqualConv2d(out_channel, out_channel,
+                                                      kernel2, padding=pad2),
+                                          nn.LeakyReLU(0.2))
 
-class PixelShuffle(nn.Module):
-    def __init__(self, ry=2, rx=2):
-        super().__init__()
-        self.ry = ry
-        self.rx = rx
+    def forward(self, input):
+        out = self.conv(input)
 
-    def forward(self, x):
-        ry = self.ry
-        rx = self.rx
+        return out
 
-        [B, C, H, W] = list(x.shape)
-
-        x = x.reshape(B, C // (ry * rx), ry, rx, H, W)
-        x = x.permute(0, 1, 4, 2, 5, 3)
-        x = x.reshape(B, C // (ry * rx), H * ry, W * rx)
-
-        return x
