@@ -14,7 +14,7 @@ parser.add_argument("--lr", default=1e-3, type=float, dest="lr")
 parser.add_argument("--batch_size", default=16, type=int, dest="batch_size")
 parser.add_argument("--num_epoch", default=100, type=int, dest="num_epoch")
 
-parser.add_argument("--data_dir", default="./datasets/celeba", type=str, dest="data_dir")
+parser.add_argument("--data_dir", default="./datasets", type=str, dest="data_dir")
 parser.add_argument("--ckpt_dir", default="./checkpoint", type=str, dest="ckpt_dir")
 parser.add_argument("--log_dir", default="./log", type=str, dest="log_dir")
 parser.add_argument("--result_dir", default="./result", type=str, dest="result_dir")
@@ -40,5 +40,5 @@ args = parser.parse_args()
 if __name__ == "__main__":
     if args.mode == "train":
         train(args)
-    elif args.mode == "test":
-        test(args)
+    # elif args.mode == "test":
+    #     test(args)
