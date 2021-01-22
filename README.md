@@ -41,4 +41,5 @@ ing sure all `forward` function outputs participate in calculating loss. If you 
 's `forward` function. Please include the loss function and the structure of the return value of `forward` of your mod
 ule when reporting this issue (e.g. list, dict, iterable)
 ```
+
     - [해결책](https://study-grow.tistory.com/entry/pytorch-%EC%97%90%EB%9F%AC-DistributedDataParallel-%EC%97%90%EB%9F%AC) 
