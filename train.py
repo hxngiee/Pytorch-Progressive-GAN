@@ -168,7 +168,7 @@ def train(gpu, ngpus_per_node, args):
 
 
     ## 손실함수 정의하기
-    class_loss = nn.CrossEntropyLoss()
+    # class_loss = nn.CrossEntropyLoss()
 
     ## Optimizer 설정하기
     optimG = torch.optim.SGD(netG.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
@@ -244,23 +244,26 @@ def train(gpu, ngpus_per_node, args):
             real_predict = real_predict.mean() - 0.001 * (real_predict ** 2).mean()
             # backward안에 값을 넣으면 어떻게 되지?
             real_predict.backward(mone)
+
             fake_imgae = netG(Variable(torch.randn(b_size,code_size)).to(device),
                               label, step, alpha)
             fake_predict, fake_class_predict = netD(fake_imgae, step, alpha)
             fake_predict = fake_predict.mean()
             fake_predict.backward(one)
 
-            eps = torch.rand(b_size, 1, 1, 1).to(device)
-            x_hat = eps * real_image.data + (1 - eps) * fake_imgae.data
-            x_hat = Variable(x_hat, requires_grad=True)
-            hat_predict, _ = netD(x_hat, step, alpha)
-            grad_x_hat = grad(outputs=hat_predict.sum(), inputs=x_hat,create_graph=True)[0]
-            grad_penalty = ((grad_x_hat.view(grad_x_hat.size(0), -1)
-                             .norm(2, dim=1) -1)**2).mean()
-            grad_penalty = 10 * grad_penalty
-            grad_penalty.backward()
-            grad_loss_val = grad_penalty.data
-            disc_loss_val = (real_predict - fake_predict).data
+            # 해당 파트가 backward()가 있는데 forward파트가 쓰이지 않아서 계속 에러 떴었음
+            # 주석처리하니까 성공
+            # eps = torch.rand(b_size, 1, 1, 1).to(device)
+            # x_hat = eps * real_image.data + (1 - eps) * fake_imgae.data
+            # x_hat = Variable(x_hat, requires_grad=True)
+            # hat_predict, _ = netD(x_hat, step, alpha)
+            # grad_x_hat = grad(outputs=hat_predict.sum(), inputs=x_hat,create_graph=True)[0]
+            # grad_penalty = ((grad_x_hat.view(grad_x_hat.size(0), -1)
+            #                  .norm(2, dim=1) -1)**2).mean()
+            # grad_penalty = 10 * grad_penalty
+            # grad_penalty.backward()
+            # grad_loss_val = grad_penalty.data
+            # disc_loss_val = (real_predict - fake_predict).data
 
             optimD.step()
 
@@ -297,11 +300,11 @@ def train(gpu, ngpus_per_node, args):
                                                input_class, step, alpha).data.cpu())
                     utils.save_image(torch.cat(images,0),f'result/{str(epoch + 1).zfill(6)}.png',
                                      nrow=n_label*10, normalize=True, range=(-1,1))
-            ## model save
-            if (epoch + 1) % 10000 == 0:
-                torch.save(netG_running,f'checkpoint/{str(epoch+1).zfill(6)}.model')
-            print(f'{epoch + 1}; G: {gen_loss_val:.5f}; D: {disc_loss_val:.5f};'
-                 f' Grad: {grad_loss_val:.5f}; Alpha: {alpha:.3f}')
+            # ## model save
+            # if (epoch + 1) % 10000 == 0:
+            #     torch.save(netG_running,f'checkpoint/{str(epoch+1).zfill(6)}.model')
+            # print(f'{epoch + 1}; G: {gen_loss_val:.5f}; D: {disc_loss_val:.5f};'
+            #      f' Grad: {grad_loss_val:.5f}; Alpha: {alpha:.3f}')
 
 
 
