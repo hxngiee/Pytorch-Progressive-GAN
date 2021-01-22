@@ -21,7 +21,7 @@ parser.add_argument('--world_size', default=1, type=int, help='')
 parser.add_argument('--distributed', action='store_true', help='')
 
 parser.add_argument("--mode", default="train", choices=["train", "test"], type=str, dest="mode")
-parser.add_argument("--train_continue", default="off", choices=["on", "off"], type=str, dest="train_continue")
+parser.add_argument("--train_continue", default="on", choices=["on", "off"], type=str, dest="train_continue")
 
 parser.add_argument("--lr", default=1e-3, type=float, dest="lr")
 parser.add_argument("--batch_size", default=16, type=int, dest="batch_size")

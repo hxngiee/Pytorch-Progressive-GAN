@@ -285,10 +285,10 @@ def train(gpu, ngpus_per_node, args):
                     utils.save_image(torch.cat(images,0),f'result/{str(epoch + 1).zfill(6)}.png',
                                      nrow=n_label*10, normalize=True, range=(-1,1))
             ## model save
-            if (epoch + 1) % 10000 == 0:
-                torch.save(netG_running,f'checkpoint/model_epoch%d.pth'%epoch)
-            # print(f'{epoch + 1}; G: {gen_loss_val:.5f}; D: {disc_loss_val:.5f};'
-            #      f' Grad: {grad_loss_val:.5f}; Alpha: {alpha:.3f}')
+            if (epoch + 1) % 100 == 0:
+                torch.save(netG_running,f'checkpoint/model_epoch%d.pth'%(epoch+1))
+            print(f'{epoch + 1}; G: {gen_loss_val:.5f}; D: {gen_loss_val:.5f};'
+                 f' Grad: {gen_loss_val:.5f}; Alpha: {alpha:.3f}')
 
         elapse_time = time.time() - epoch_start
         elapse_time = datetime.timedelta(seconds=elapse_time)
