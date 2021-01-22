@@ -25,9 +25,6 @@ from torchvision import datasets, transforms, utils
 MEAN = 0.5
 STD = 0.5
 
-num_workers = 0
-
-
 def train(gpu, ngpus_per_node, args):
     ## PGGAN
     n_label = 1
@@ -95,6 +92,12 @@ def train(gpu, ngpus_per_node, args):
 
     ## 디렉토리 생성하기
     result_dir_train = os.path.join(result_dir, 'train')
+
+    if not os.path.exists(result_dir_train):
+        os.makedirs(os.path.join(result_dir_train, 'png'))
+
+        # os.makedirs(os.path.join(result_dir_train, 'png', 'a2b'))
+        # os.makedirs(os.path.join(result_dir_train, 'png', 'b2a'))
 
     ## 네트워크 학습하기
     if mode == 'train':
@@ -283,7 +286,7 @@ def train(gpu, ngpus_per_node, args):
                                      nrow=n_label*10, normalize=True, range=(-1,1))
             ## model save
             if (epoch + 1) % 10000 == 0:
-                torch.save(netG_running,f'checkpoint/{str(epoch+1).zfill(6)}.model')
+                torch.save(netG_running,f'checkpoint/model_epoch%d.pth'%epoch)
             # print(f'{epoch + 1}; G: {gen_loss_val:.5f}; D: {disc_loss_val:.5f};'
             #      f' Grad: {grad_loss_val:.5f}; Alpha: {alpha:.3f}')
 
