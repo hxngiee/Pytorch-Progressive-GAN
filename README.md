@@ -1,5 +1,9 @@
 # Progressive-GAN
 Multi GPU Training Code for GAN with Pytorch
+#### To do
+- Image Generation 프레임워크 DCGAN에 맞게 세팅
+  - 없는 폴더 생성, 모델 저장 및 로드, model generation test
+- train_dist_parallel에 eps 반영
 
 ## Ruqeirement 
 - Pytorch 1.7.0 +  
