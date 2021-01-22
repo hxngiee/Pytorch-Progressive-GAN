@@ -49,4 +49,17 @@ ule when reporting this issue (e.g. list, dict, iterable)
   - 원인 : eps 파트가 forward 부분이랑 연결이 안됨
     -  train_dist_parallel 파트에선 임시로 지워둔 상태
   - [해결책](https://study-grow.tistory.com/entry/pytorch-%EC%97%90%EB%9F%AC-DistributedDataParallel-%EC%97%90%EB%9F%AC) 
-    
+
+
+```
+Traceback (most recent call last):
+  File "/home/ubuntu/anaconda3/envs/pggan/lib/python3.8/site-packages/torch/multiprocessing/spawn.py", line 19, in _wrap
+    fn(i, *args)
+  File "/home/ubuntu/hongiee/pggan_multi/train_dist_parallel.py", line 206, in train
+    optimG, optimD, st_epoch = load(ckpt_dir=ckpt_dir,
+  File "/home/ubuntu/hongiee/pggan_multi/util.py", line 84, in load
+    dict_model = torch.load('%s/%s' % (ckpt_dir, ckpt_lst[-1]), map_location=device)
+IndexError: list index out of range
+```
+- main.py에서 checkpoint 폴더에 모델이 없는데  train_continue가 on으로 설정되어 있으면 생기는 에러
+  - 초기 학습시 train_continue를 off로 설정하고 모델이 저장되면 on으로 학습할 것
