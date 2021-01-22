@@ -1,8 +1,3 @@
-import torch.distributed as dist
-
-import time
-import datetime
-
 import os
 import numpy as np
 from PIL import Image
@@ -25,30 +20,21 @@ from torchvision import datasets, transforms, utils
 MEAN = 0.5
 STD = 0.5
 
-num_workers = 0
+NUM_WORKER = 0
 
 
-def train(gpu, ngpus_per_node, args):
+def train(args):
     ## PGGAN
     n_label = 1
     code_size = 512 - n_label
     n_critic = 1 # 얘 지워도 되지 않나? ㅇㅇ
-
-    args.gpu = gpu
-    ngpus_per_node = torch.cuda.device_count()
-    print("Use GPU: {} for training".format(args.gpu))
-
-    args.rank = args.rank * ngpus_per_node + gpu
-    dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
-                            world_size=args.world_size, rank=args.rank)
 
     ## 트레이닝 파라메터 설정하기
     mode = args.mode
     train_continue = args.train_continue
 
     lr = args.lr
-    batch_size = int(args.batch_size / ngpus_per_node)
-    num_workers = int(args.num_workers / ngpus_per_node)
+    batch_size = args.batch_size
     num_epoch = args.num_epoch
 
     data_dir = args.data_dir
@@ -101,13 +87,7 @@ def train(gpu, ngpus_per_node, args):
 
         def loader_train(transform):
             dataset_train = datasets.ImageFolder(data_dir,transform=transform)
-            train_sampler = torch.utils.data.distributed.DistributedSampler(dataset_train)
-
-            loader_train = DataLoader(dataset_train, batch_size=batch_size,
-                                      shuffle=(train_sampler is None), num_workers=num_workers,
-                                      sampler=train_sampler)
-
-            # loader_train = DataLoader(dataset_train, shuffle=True, batch_size=batch_size, num_workers=num_workers)
+            loader_train = DataLoader(dataset_train, shuffle=True, batch_size=batch_size, num_workers=NUM_WORKER)
             return loader_train
 
         def sample_data(loader_train, image_size=4):
@@ -140,41 +120,22 @@ def train(gpu, ngpus_per_node, args):
 
     ## 네트워크 생성하기
     if network == "PGGAN":
-        print('==> Making model..')
-        netG = PGGAN(code_size,n_label)
-        netG_running = PGGAN(code_size,n_label)
+        netG = PGGAN(code_size,n_label).to(device)
+        # netG_a2b = CycleGAN(in_channels=nch, out_channels=nch, nker=nker, norm=norm, nblk=9).to(device)
+
+        netD = Discriminator(n_label).to(device)
+        netG_running = PGGAN(code_size,n_label).to(device)
         netG_running.train(False)
-        netD = Discriminator(n_label)
 
         ## 이 초기화 위치 여기 맞나
         accumulate(netG_running, netG, 0)
-
-        torch.cuda.set_device(args.gpu)
-        netG.cuda(args.gpu)
-        netG_running.cuda(args.gpu)
-        netD.cuda(args.gpu)
-
-        netG = torch.nn.parallel.DistributedDataParallel(netG, device_ids=[args.gpu],find_unused_parameters=True)
-        netG_running = torch.nn.parallel.DistributedDataParallel(netG_running, device_ids=[args.gpu],find_unused_parameters=True)
-        netD = torch.nn.parallel.DistributedDataParallel(netD, device_ids=[args.gpu],find_unused_parameters=True)
-
-        netG_num_params = sum(p.numel() for p in netG.parameters() if p.requires_grad)
-        netG_running_num_params = sum(p.numel() for p in netG_running.parameters() if p.requires_grad)
-        netD_num_params = sum(p.numel() for p in netD.parameters() if p.requires_grad)
-
-        print('The number of netG parameters of model is', netG_num_params)
-        print('The number of netG_running parameters of model is', netG_running_num_params)
-        print('The number of netD parameters of model is', netD_num_params)
-
 
     ## 손실함수 정의하기
     class_loss = nn.CrossEntropyLoss()
 
     ## Optimizer 설정하기
-    optimG = torch.optim.SGD(netG.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
-    optimD = torch.optim.SGD(netD.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
-    # optimG = torch.optim.Adam(netG.parameters(), lr=lr, betas=(0.5, 0.999))
-    # optimD = torch.optim.Adam(netD.parameters(), lr=lr, betas=(0.5, 0.999))
+    optimG = torch.optim.Adam(netG.parameters(), lr=lr, betas=(0.5, 0.999))
+    optimD = torch.optim.Adam(netD.parameters(), lr=lr, betas=(0.5, 0.999))
 
 
     ## Tensorboard 를 사용하기 위한 SummaryWriter 설정
@@ -207,10 +168,7 @@ def train(gpu, ngpus_per_node, args):
                                             netG=netG, netD=netD,
                                             optimG=optimG, optimD=optimD)
 
-        epoch_start = time.time()
         for epoch in range(st_epoch + 1, num_epoch + 1):
-            # start = time.time()
-
             netG.train()
             netD.train()
 
@@ -220,6 +178,7 @@ def train(gpu, ngpus_per_node, args):
             if stabilize is False and iteration > 50000:
                 dataset_train = sample_data(loader_train,4 * 2 ** step)
                 stabilize = True
+
             if iteration > 100000:
                 alpha = 0
                 iteration = 0
@@ -229,13 +188,14 @@ def train(gpu, ngpus_per_node, args):
                     alpha = 1
                     step = 5
                 dataset_train = sample_data(loader_train, 4 * 2 ** step)
+
             try:
                 real_image, label = next(dataset_train)
             except:
                 dataset_train = sample_data(loader_train, 4 * 2 ** step)
                 real_image, label = next(dataset_train)
-            iteration += 1
 
+            iteration += 1
 
             b_size = real_image.size(0)
             real_image = Variable(real_image).to(device)
@@ -244,6 +204,7 @@ def train(gpu, ngpus_per_node, args):
             real_predict = real_predict.mean() - 0.001 * (real_predict ** 2).mean()
             # backward안에 값을 넣으면 어떻게 되지?
             real_predict.backward(mone)
+
             fake_imgae = netG(Variable(torch.randn(b_size,code_size)).to(device),
                               label, step, alpha)
             fake_predict, fake_class_predict = netD(fake_imgae, step, alpha)
@@ -264,29 +225,28 @@ def train(gpu, ngpus_per_node, args):
 
             optimD.step()
 
-            ###
-
             ## train netG
             netG.zero_grad()
+
             requires_grad(netG, True)
             requires_grad(netD, False)
+
             # n_label = 1, code_size = 511
             input_class = Variable(torch.multinomial(torch.ones(n_label), batch_size, replacement=True)).to(device)
             fake_image = netG(Variable(torch.randn(batch_size,code_size)).to(device),
                               input_class, step, alpha)
             predict, class_predict = netD(fake_image, step, alpha)
+
             loss = -predict.mean()
             gen_loss_val = loss.data
 
             loss.backward()
             optimG.step()
-
-
-            ###
-
             accumulate(netG_running,netG)
+
             requires_grad(netG, False)
             requires_grad(netD, True)
+
 
             ## save image
             if (epoch + 1) % 100 == 0:
@@ -297,14 +257,11 @@ def train(gpu, ngpus_per_node, args):
                                                input_class, step, alpha).data.cpu())
                     utils.save_image(torch.cat(images,0),f'result/{str(epoch + 1).zfill(6)}.png',
                                      nrow=n_label*10, normalize=True, range=(-1,1))
+
             ## model save
             if (epoch + 1) % 10000 == 0:
                 torch.save(netG_running,f'checkpoint/{str(epoch+1).zfill(6)}.model')
+
             print(f'{epoch + 1}; G: {gen_loss_val:.5f}; D: {disc_loss_val:.5f};'
                  f' Grad: {grad_loss_val:.5f}; Alpha: {alpha:.3f}')
 
-
-
-        elapse_time = time.time() - epoch_start
-        elapse_time = datetime.timedelta(seconds=elapse_time)
-        print("Training time {}".format(elapse_time))
