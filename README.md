@@ -51,7 +51,7 @@ ule when reporting this issue (e.g. list, dict, iterable)
   - 원인 : eps 파트가 forward 부분이랑 연결이 안됨
     -  train_dist_parallel 파트에선 임시로 지워둔 상태
   - [해결책](https://study-grow.tistory.com/entry/pytorch-%EC%97%90%EB%9F%AC-DistributedDataParallel-%EC%97%90%EB%9F%AC) 
-
+    
 
 ```
 Traceback (most recent call last):
