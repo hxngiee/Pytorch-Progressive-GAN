@@ -33,6 +33,8 @@ python main_single_gpu.py
 python main.py --gpu_device 0 1 2 3 --batch_size 768
 ```
 
+## Tips
+
 ## Error
 
 ```
