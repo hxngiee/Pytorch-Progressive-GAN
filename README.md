@@ -2,7 +2,7 @@
 Multi GPU Training Code for GAN with Pytorch
 #### To do
 - Image Generation 프레임워크 DCGAN에 맞게 세팅
-  - 모델 저장 및 로드, test image generation, tensorboardX 적용
+  - 모델 저장 및 로드-> utils에서 save, load 모델에 맞게 수정할 것, test image generation, tensorboardX 적용
 - train_dist_parallel에 eps 반영
 
 ## Ruqeirement 
