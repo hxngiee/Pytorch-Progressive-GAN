@@ -5,7 +5,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.utils.data.distributed
 
-from train import *
+from train_dist_parallel import *
 
 ## Parser 생성하기
 parser = argparse.ArgumentParser(description="PGGAN",
@@ -50,51 +50,9 @@ parser.add_argument("--learning_type", default="plain", choices=["plain", "resid
 
 args = parser.parse_args()
 
-# gpu_devices = ','.join([str(id) for id in args.gpu_devices])
-# os.environ["CUDA_VISIBLE_DEVICES"] = gpu_devices
+gpu_devices = ','.join([str(id) for id in args.gpu_devices])
+os.environ["CUDA_VISIBLE_DEVICES"] = gpu_devices
 
-# def main_worker(gpu, ngpus_per_node, args):
-#     args.gpu = gpu
-#     ngpus_per_node = torch.cuda.device_count()
-#     print("Use GPU: {} for training".format(args.gpu))
-#
-#     args.rank = args.rank * ngpus_per_node + gpu
-#     dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
-#                             world_size=args.world_size, rank=args.rank)
-#
-#     print('==> Making model..')
-#     net = PGGAN()
-#     torch.cuda.set_device(args.gpu)
-#     net.cuda(args.gpu)
-#     args.batch_size = int(args.batch_size / ngpus_per_node)
-#     args.num_workers = int(args.num_workers / ngpus_per_node)
-#     net = torch.nn.parallel.DistributedDataParallel(net, device_ids=[args.gpu])
-#     num_params = sum(p.numel() for p in net.parameters() if p.requires_grad)
-#     print('The number of parameters of model is', num_params)
-#
-#     print('==> Preparing data..')
-#     transforms_train = transforms.Compose([
-#         transforms.RandomCrop(32, padding=4),
-#         transforms.RandomHorizontalFlip(),
-#         transforms.ToTensor(),
-#         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-#
-#     dataset_train = CIFAR10(root='../data', train=True, download=True,
-#                             transform=transforms_train)
-#     train_sampler = torch.utils.data.distributed.DistributedSampler(dataset_train)
-#     train_loader = DataLoader(dataset_train, batch_size=args.batch_size,
-#                               shuffle=(train_sampler is None), num_workers=args.num_workers,
-#                               sampler=train_sampler)
-#
-#     # there are 10 classes so the dataset name is cifar-10
-#     classes = ('plane', 'car', 'bird', 'cat', 'deer',
-#                'dog', 'frog', 'horse', 'ship', 'truck')
-#
-#     criterion = nn.CrossEntropyLoss()
-#     optimizer = optim.SGD(net.parameters(), lr=args.lr,
-#                           momentum=0.9, weight_decay=1e-4)
-#
-#     train(net, criterion, optimizer, train_loader, args.gpu)
 
 if __name__ == "__main__":
 
@@ -102,7 +60,5 @@ if __name__ == "__main__":
         ngpus_per_node = torch.cuda.device_count()
         args.world_size = ngpus_per_node * args.world_size
         mp.spawn(train, nprocs=ngpus_per_node, args=(ngpus_per_node, args))
-        # train(args)
-
     # elif args.mode == "test":
     #     test(args)

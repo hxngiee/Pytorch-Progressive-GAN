@@ -1,7 +1,7 @@
 ## 라이브러리 추가하기
 import argparse
 
-from train_ori import *
+from train_single_gpu import *
 
 ## Parser 생성하기
 parser = argparse.ArgumentParser(description="CycleGAN",
