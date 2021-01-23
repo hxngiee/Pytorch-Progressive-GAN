@@ -11,11 +11,6 @@ from train_dist_parallel import *
 parser = argparse.ArgumentParser(description="PGGAN",
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument('--multiprocessing-distributed', action='store_true',
-                    help='Use multi-processing distributed training to launch '
-                         'N processes per node, which has N GPUs. This is the '
-                         'fastest way to use PyTorch for either single node or '
-                         'multi node data parallel training')
 parser.add_argument('--num_workers', type=int, default=4, help='')
 parser.add_argument("--gpu_devices", type=int, nargs='+', default=None, help="")
 parser.add_argument('--gpu', default=None, type=int, help='GPU id to use.')
@@ -55,8 +50,9 @@ parser.add_argument("--learning_type", default="plain", choices=["plain", "resid
 
 args = parser.parse_args()
 
-gpu_devices = ','.join([str(id) for id in args.gpu_devices])
-os.environ["CUDA_VISIBLE_DEVICES"] = gpu_devices
+if args.mode == "train":
+    gpu_devices = ','.join([str(id) for id in args.gpu_devices])
+    os.environ["CUDA_VISIBLE_DEVICES"] = gpu_devices
 
 if __name__ == "__main__":
 

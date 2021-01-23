@@ -203,13 +203,10 @@ def train(gpu, ngpus_per_node, args):
     # TRAIN MODE
     if mode == 'train':
         if train_continue == "on":
-            # netG, netD, \
-            # optimG, optimD, st_epoch = load(ckpt_dir=ckpt_dir,
-            #                                 netG=netG, netD=netD,
-            #                                 optimG=optimG, optimD=optimD)
-
-            netG, netD, st_epoch = load(ckpt_dir=ckpt_dir,
-                                            netG=netG, netD=netD)
+            netG, netD, \
+            optimG, optimD, st_epoch = load(ckpt_dir=ckpt_dir,
+                                            netG=netG, netD=netD,
+                                            optimG=optimG, optimD=optimD, mode=mode)
 
         epoch_start = time.time()
         for epoch in range(st_epoch + 1, num_epoch + 1):
@@ -309,12 +306,6 @@ def train(gpu, ngpus_per_node, args):
         print("Training time {}".format(elapse_time))
 
 
-
-
-
-
-
-
 def test(args):
     ## 트레이닝 파라메터 설정하기
     mode = args.mode
@@ -387,8 +378,6 @@ def test(args):
         netG = PGGAN(code_size, n_label)
         netD = Discriminator(n_label)
 
-        # torch.cuda.set_device(0)
-
         netG.to(device)
         netD.to(device)
 
@@ -416,8 +405,7 @@ def test(args):
 
     # TRAIN MODE
     if mode == "test":
-        netG, netD, optimG, optimD, st_epoch = load(ckpt_dir=ckpt_dir, netG=netG, netD=netD, optimG=optimG, optimD=optimD)
-        # netG, netD, st_epoch = load(ckpt_dir=ckpt_dir, netG=netG, netD=netD)
+        netG, netD, optimG, optimD, st_epoch = load(ckpt_dir=ckpt_dir, netG=netG, netD=netD, optimG=optimG, optimD=optimD,mode=mode)
 
         with torch.no_grad():
             netG.eval()
