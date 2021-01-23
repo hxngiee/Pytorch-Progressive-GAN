@@ -26,10 +26,6 @@ MEAN = 0.5
 STD = 0.5
 
 def train(gpu, ngpus_per_node, args):
-    ## PGGAN
-    n_label = 1
-    code_size = 512 - n_label
-    n_critic = 1 # 얘 지워도 되지 않나? ㅇㅇ
 
     args.gpu = gpu
     ngpus_per_node = torch.cuda.device_count()
@@ -38,6 +34,11 @@ def train(gpu, ngpus_per_node, args):
     args.rank = args.rank * ngpus_per_node + gpu
     dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
                             world_size=args.world_size, rank=args.rank)
+
+    ## PGGAN
+    n_label = 1
+    code_size = 512 - n_label
+    n_critic = 1 # 얘 지워도 되지 않나? ㅇㅇ
 
     ## 트레이닝 파라메터 설정하기
     mode = args.mode
@@ -287,10 +288,17 @@ def train(gpu, ngpus_per_node, args):
                                                input_class, step, alpha).data.cpu())
                     utils.save_image(torch.cat(images,0),f'result/{str(epoch + 1).zfill(6)}.png',
                                      nrow=n_label*10, normalize=True, range=(-1,1))
+
             ## model save
             if (epoch + 1) % 100 == 0:
+                # if not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank % ngpus_per_node == 0):
+                if args.rank == 0:
+                    # save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, epoch=(epoch + 1))
+                    save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, optimG=optimG, optimD=optimD, epoch=(epoch+1))
+                    # save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, epoch=(epoch+1))
+
                 # save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, optimG=optimG, optimD=optimD, epoch=(epoch+1))
-                save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, epoch=(epoch+1))
+                # save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, epoch=(epoch+1))
 
 
             print(f'{epoch + 1}; G: {gen_loss_val:.5f}; D: {gen_loss_val:.5f};'
@@ -408,8 +416,8 @@ def test(args):
 
     # TRAIN MODE
     if mode == "test":
-        # netG, netD, optimG, optimD, st_epoch = load(ckpt_dir=ckpt_dir, netG=netG, netD=netD, optimG=optimG, optimD=optimD)
-        netG, netD, st_epoch = load(ckpt_dir=ckpt_dir, netG=netG, netD=netD)
+        netG, netD, optimG, optimD, st_epoch = load(ckpt_dir=ckpt_dir, netG=netG, netD=netD, optimG=optimG, optimD=optimD)
+        # netG, netD, st_epoch = load(ckpt_dir=ckpt_dir, netG=netG, netD=netD)
 
         with torch.no_grad():
             netG.eval()
@@ -429,4 +437,3 @@ def test(args):
             #
             #     output_ = np.clip(output_, a_min=0, a_max=1)
             #     plt.imsave(os.path.join(result_dir_test, 'png', '%04d_output.png' % id), output_, cmap=cmap)
-            #
