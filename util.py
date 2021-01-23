@@ -1,3 +1,8 @@
+import shutil
+
+
+
+
 import os
 import numpy as np
 from scipy.stats import poisson
@@ -59,38 +64,71 @@ def init_weights(net, init_type='normal', init_gain=0.02):
 
 
 
+
+def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+    torch.save(state, filename)
+    if is_best:
+        shutil.copyfile(filename, 'model_best.pth.tar')
+
+
 ## 네트워크 저장하기
-def save(ckpt_dir, netG_a2b, netG_b2a, netD_a, netD_b, optimG, optimD, epoch):
+# def save(ckpt_dir, netG, netD, optimG, optimD, epoch):
+def save(ckpt_dir, netG, netD,epoch):
     if not os.path.exists(ckpt_dir):
         os.makedirs(ckpt_dir)
 
-    torch.save({'netG_a2b': netG_a2b.state_dict(), 'netG_b2a': netG_b2a.state_dict(),
-                'netD_a': netD_a.state_dict(), 'netD_b': netD_b.state_dict(),
-                'optimG': optimG.state_dict(), 'optimD': optimD.state_dict()},
-               "%s/model_epoch%d.pth" % (ckpt_dir, epoch))
+    # torch.save({'netG': netG.module.state_dict(), 'netD': netD.module.state_dict(),
+    #             'optimG': optimG.state_dict(), 'optimD': optimD.state_dict()},
+    #            "%s/model_epoch%d.pth.tar" % (ckpt_dir, epoch), _use_new_zipfile_serialization=False)
+
+    # torch.save({'netG': netG.module.state_dict(), 'netD': netD.module.state_dict()},
+    #            "%s/model_epoch%d.pth.tar" % (ckpt_dir, epoch), _use_new_zipfile_serialization=False)
+
+    torch.save({'netG': netG.state_dict(), 'netD': netD.state_dict()},
+               "%s/model_epoch%d.pth.tar" % (ckpt_dir, epoch), _use_new_zipfile_serialization=False)
+
+    # ㅅㅂ optim 분리해서 저장하자
+    # torch.save({'optimG': optimG.state_dict(), 'optimD': optimD.state_dict()},
+    #            "%s/optim_epoch%d.pth" % (ckpt_dir, epoch), _use_new_zipfile_serialization=False)
+
 
 ## 네트워크 불러오기
-def load(ckpt_dir, netG, netD, optimG, optimD):
+# def load(ckpt_dir, netG, netD, optimG, optimD):
+def load(ckpt_dir, netG, netD):
     if not os.path.exists(ckpt_dir):
         epoch = 0
-        return netG, netD, optimG, optimD, epoch
+        # return netG, netD, optimG, optimD, epoch
+        return netG, netD, epoch
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     ckpt_lst = os.listdir(ckpt_dir)
-    ckpt_lst = [f for f in ckpt_lst if f.endswith('pth')]
+    # ckpt_lst = [f for f in ckpt_lst if f.endswith('pth')]
+    ckpt_lst = [f for f in ckpt_lst if f.endswith('.tar')]
     ckpt_lst.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
 
-    dict_model = torch.load('%s/%s' % (ckpt_dir, ckpt_lst[-1]), map_location=device)
+    optim_ckpt_lst = os.listdir(ckpt_dir)
+    optim_ckpt_lst = [f for f in optim_ckpt_lst if f.endswith('pth')]
+    # optim_ckpt_lst = [f for f in ckpt_lst if f.endswith('.tar')]
+    optim_ckpt_lst.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
 
-    ## 뭐라 저장했지?
+    print(ckpt_lst)
+    print(optim_ckpt_lst)
+
+    dict_model = torch.load('%s/%s' % (ckpt_dir, ckpt_lst[-1]), map_location=device)
+    # optim_dict_model = torch.load('%s/%s' % (ckpt_dir, ckpt_lst[-1]), map_location=device)
+
     netG.load_state_dict(dict_model['netG'])
     netD.load_state_dict(dict_model['netD'])
-    optimG.load_state_dict(dict_model['optimG'])
-    optimD.load_state_dict(dict_model['optimD'])
+    # optimG.load_state_dict(optim_dict_model['optimG'])
+    # optimD.load_state_dict(optim_dict_model['optimD'])
     epoch = int(ckpt_lst[-1].split('epoch')[1].split('.pth')[0])
 
-    return netG, netD, optimG, optimD, epoch
+    print(epoch)
+
+
+    # return netG, netD, optimG, optimD, epoch
+    return netG, netD, epoch
 
 ## Add Sampling
 def add_sampling(img, type="random", opts=None):

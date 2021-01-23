@@ -202,10 +202,13 @@ def train(gpu, ngpus_per_node, args):
     # TRAIN MODE
     if mode == 'train':
         if train_continue == "on":
-            netG, netD, \
-            optimG, optimD, st_epoch = load(ckpt_dir=ckpt_dir,
-                                            netG=netG, netD=netD,
-                                            optimG=optimG, optimD=optimD)
+            # netG, netD, \
+            # optimG, optimD, st_epoch = load(ckpt_dir=ckpt_dir,
+            #                                 netG=netG, netD=netD,
+            #                                 optimG=optimG, optimD=optimD)
+
+            netG, netD, st_epoch = load(ckpt_dir=ckpt_dir,
+                                            netG=netG, netD=netD)
 
         epoch_start = time.time()
         for epoch in range(st_epoch + 1, num_epoch + 1):
@@ -286,10 +289,144 @@ def train(gpu, ngpus_per_node, args):
                                      nrow=n_label*10, normalize=True, range=(-1,1))
             ## model save
             if (epoch + 1) % 100 == 0:
-                torch.save(netG_running,f'checkpoint/model_epoch%d.pth'%(epoch+1))
+                # save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, optimG=optimG, optimD=optimD, epoch=(epoch+1))
+                save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, epoch=(epoch+1))
+
+
             print(f'{epoch + 1}; G: {gen_loss_val:.5f}; D: {gen_loss_val:.5f};'
                  f' Grad: {gen_loss_val:.5f}; Alpha: {alpha:.3f}')
 
         elapse_time = time.time() - epoch_start
         elapse_time = datetime.timedelta(seconds=elapse_time)
         print("Training time {}".format(elapse_time))
+
+
+
+
+
+
+
+
+def test(args):
+    ## 트레이닝 파라메터 설정하기
+    mode = args.mode
+    train_continue = args.train_continue
+
+    lr = args.lr
+    batch_size = args.batch_size
+    num_epoch = args.num_epoch
+
+    data_dir = args.data_dir
+    ckpt_dir = args.ckpt_dir
+    log_dir = args.log_dir
+    result_dir = args.result_dir
+
+    task = args.task
+    opts = [args.opts[0], np.asarray(args.opts[1:]).astype(np.float)]
+
+    ny = args.ny
+    nx = args.nx
+    nch = args.nch
+    nker = args.nker
+
+    network = args.network
+    learning_type = args.learning_type
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    print("mode: %s" % mode)
+
+    print("learning rate: %.4e" % lr)
+    print("batch size: %d" % batch_size)
+    print("number of epoch: %d" % num_epoch)
+
+    print("task: %s" % task)
+    print("opts: %s" % opts)
+
+    print("network: %s" % network)
+    print("learning type: %s" % learning_type)
+
+    print("data dir: %s" % data_dir)
+    print("ckpt dir: %s" % ckpt_dir)
+    print("log dir: %s" % log_dir)
+    print("result dir: %s" % result_dir)
+
+    print("device: %s" % device)
+
+    ## 디렉토리 생성하기
+    result_dir_test = os.path.join(result_dir, 'test')
+
+    if not os.path.exists(result_dir_test):
+        os.makedirs(os.path.join(result_dir_test, 'png'))
+        os.makedirs(os.path.join(result_dir_test, 'numpy'))
+
+    ## 네트워크 학습하기
+    if mode == "test":
+        transform_test = transforms.Compose([Resize(shape=(ny, nx, nch)), Normalization(mean=0.5, std=0.5)])
+
+        dataset_test = Dataset(data_dir=data_dir, transform=transform_test)
+        loader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, num_workers=8)
+
+        # 그밖에 부수적인 variables 설정하기
+        num_data_test = len(dataset_test)
+        num_batch_test = np.ceil(num_data_test / batch_size)
+
+
+    ## 네트워크 생성하기
+    if network == "PGGAN":
+        n_label = 1
+        code_size = 512 - n_label
+        netG = PGGAN(code_size, n_label)
+        netD = Discriminator(n_label)
+
+        # torch.cuda.set_device(0)
+
+        netG.to(device)
+        netD.to(device)
+
+    ## 손실함수 정의하기
+    # fn_loss = nn.BCEWithLogitsLoss().to(device)
+    # fn_loss = nn.MSELoss().to(device)
+
+    fn_loss = nn.BCELoss().to(device)
+
+    ## Optimizer 설정하기
+    optimG = torch.optim.SGD(netG.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
+    optimD = torch.optim.SGD(netD.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
+    # optimG = torch.optim.Adam(netG.parameters(), lr=lr, betas=(0.5, 0.999))
+    # optimD = torch.optim.Adam(netD.parameters(), lr=lr, betas=(0.5, 0.999))
+
+    ## 그밖에 부수적인 functions 설정하기
+    fn_tonumpy = lambda x: x.to('cpu').detach().numpy().transpose(0, 2, 3, 1)
+    fn_denorm = lambda x, mean, std: (x * std) + mean
+    fn_class = lambda x: 1.0 * (x > 0.5)
+
+    cmap = None
+
+    ## 네트워크 학습시키기
+    st_epoch = 0
+
+    # TRAIN MODE
+    if mode == "test":
+        # netG, netD, optimG, optimD, st_epoch = load(ckpt_dir=ckpt_dir, netG=netG, netD=netD, optimG=optimG, optimD=optimD)
+        netG, netD, st_epoch = load(ckpt_dir=ckpt_dir, netG=netG, netD=netD)
+
+        with torch.no_grad():
+            netG.eval()
+
+            input_class = Variable(torch.zeros(10).long()).to(device)
+            output = netG(Variable(torch.randn(n_label*10, code_size)).to(device),input_class, step=2, alpha=1).data.cpu()
+
+            print("Success!!!!!!!!!!!!")
+
+            # output = fn_tonumpy(fn_denorm(output, mean=0.5, std=0.5))
+            #
+            # for j in range(output.shape[0]):
+            #     id = j
+            #
+            #     output_ = output[j]
+            #     np.save(os.path.join(result_dir_test, 'numpy', '%04d_output.npy' % id), output_)
+            #
+            #     output_ = np.clip(output_, a_min=0, a_max=1)
+            #     plt.imsave(os.path.join(result_dir_test, 'png', '%04d_output.png' % id), output_, cmap=cmap)
+            #
