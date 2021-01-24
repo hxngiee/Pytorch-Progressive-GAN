@@ -27,12 +27,14 @@ STD = 0.5
 
 def train(gpu, ngpus_per_node, args):
 
+    # single일경우 0번, multi일 경우 0,1,2 각각
     args.gpu = gpu
-    ngpus_per_node = torch.cuda.device_count()
-    print("Use GPU: {} for training".format(args.gpu))
+    if args.mode == "train_multi":
+        ngpus_per_node = torch.cuda.device_count()
+        print("Use GPU: {} for training".format(args.gpu))
 
-    args.rank = args.rank * ngpus_per_node + gpu
-    dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
+        args.rank = args.rank * ngpus_per_node + gpu
+        dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
                             world_size=args.world_size, rank=args.rank)
 
     ## PGGAN
@@ -100,18 +102,21 @@ def train(gpu, ngpus_per_node, args):
         # os.makedirs(os.path.join(result_dir_train, 'png', 'a2b'))
         # os.makedirs(os.path.join(result_dir_train, 'png', 'b2a'))
 
+
     ## 네트워크 학습하기
-    if mode == 'train':
+    if mode == 'train_single' or 'train_multi':
 
         def loader_train(transform):
             dataset_train = datasets.ImageFolder(data_dir,transform=transform)
-            train_sampler = torch.utils.data.distributed.DistributedSampler(dataset_train)
 
-            loader_train = DataLoader(dataset_train, batch_size=batch_size,
-                                      shuffle=(train_sampler is None), num_workers=num_workers,
-                                      sampler=train_sampler)
+            if mode == 'train_single':
+                loader_train = DataLoader(dataset_train, shuffle=True, batch_size=batch_size, num_workers=num_workers)
 
-            # loader_train = DataLoader(dataset_train, shuffle=True, batch_size=batch_size, num_workers=num_workers)
+            elif mode == 'train_multi':
+                train_sampler = torch.utils.data.distributed.DistributedSampler(dataset_train)
+                loader_train = DataLoader(dataset_train, batch_size=batch_size,
+                                          shuffle=(train_sampler is None), num_workers=num_workers,sampler=train_sampler)
+
             return loader_train
 
         def sample_data(loader_train, image_size=4):
@@ -155,9 +160,10 @@ def train(gpu, ngpus_per_node, args):
         netG_running.cuda(args.gpu)
         netD.cuda(args.gpu)
 
-        netG = torch.nn.parallel.DistributedDataParallel(netG, device_ids=[args.gpu],find_unused_parameters=True)
-        netG_running = torch.nn.parallel.DistributedDataParallel(netG_running, device_ids=[args.gpu],find_unused_parameters=True)
-        netD = torch.nn.parallel.DistributedDataParallel(netD, device_ids=[args.gpu],find_unused_parameters=True)
+        if mode == 'train_multi':
+            netG = torch.nn.parallel.DistributedDataParallel(netG, device_ids=[args.gpu],find_unused_parameters=True)
+            netG_running = torch.nn.parallel.DistributedDataParallel(netG_running, device_ids=[args.gpu],find_unused_parameters=True)
+            netD = torch.nn.parallel.DistributedDataParallel(netD, device_ids=[args.gpu],find_unused_parameters=True)
 
         netG_num_params = sum(p.numel() for p in netG.parameters() if p.requires_grad)
         netG_running_num_params = sum(p.numel() for p in netG_running.parameters() if p.requires_grad)
@@ -172,10 +178,10 @@ def train(gpu, ngpus_per_node, args):
     # class_loss = nn.CrossEntropyLoss()
 
     ## Optimizer 설정하기
-    optimG = torch.optim.SGD(netG.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
-    optimD = torch.optim.SGD(netD.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
-    # optimG = torch.optim.Adam(netG.parameters(), lr=lr, betas=(0.5, 0.999))
-    # optimD = torch.optim.Adam(netD.parameters(), lr=lr, betas=(0.5, 0.999))
+    # optimG = torch.optim.SGD(netG.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
+    # optimD = torch.optim.SGD(netD.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
+    optimG = torch.optim.Adam(netG.parameters(), lr=lr, betas=(0.5, 0.999))
+    optimD = torch.optim.Adam(netD.parameters(), lr=lr, betas=(0.5, 0.999))
 
 
     ## Tensorboard 를 사용하기 위한 SummaryWriter 설정
@@ -201,7 +207,7 @@ def train(gpu, ngpus_per_node, args):
     stabilize = False
 
     # TRAIN MODE
-    if mode == 'train':
+    if mode == 'train_single' or 'train_multi':
         if train_continue == "on":
             netG, netD, \
             optimG, optimD, st_epoch = load(ckpt_dir=ckpt_dir,
@@ -290,12 +296,10 @@ def train(gpu, ngpus_per_node, args):
             if (epoch + 1) % 100 == 0:
                 # if not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank % ngpus_per_node == 0):
                 if args.rank == 0:
-                    # save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, epoch=(epoch + 1))
-                    save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, optimG=optimG, optimD=optimD, epoch=(epoch+1))
+                    save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, optimG=optimG, optimD=optimD, epoch=(epoch+1), mode=mode)
                     # save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, epoch=(epoch+1))
 
                 # save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, optimG=optimG, optimD=optimD, epoch=(epoch+1))
-                # save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, epoch=(epoch+1))
 
 
             print(f'{epoch + 1}; G: {gen_loss_val:.5f}; D: {gen_loss_val:.5f};'
@@ -388,10 +392,10 @@ def test(args):
     fn_loss = nn.BCELoss().to(device)
 
     ## Optimizer 설정하기
-    optimG = torch.optim.SGD(netG.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
-    optimD = torch.optim.SGD(netD.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
-    # optimG = torch.optim.Adam(netG.parameters(), lr=lr, betas=(0.5, 0.999))
-    # optimD = torch.optim.Adam(netD.parameters(), lr=lr, betas=(0.5, 0.999))
+    # optimG = torch.optim.SGD(netG.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
+    # optimD = torch.optim.SGD(netD.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
+    optimG = torch.optim.Adam(netG.parameters(), lr=lr, betas=(0.5, 0.999))
+    optimD = torch.optim.Adam(netD.parameters(), lr=lr, betas=(0.5, 0.999))
 
     ## 그밖에 부수적인 functions 설정하기
     fn_tonumpy = lambda x: x.to('cpu').detach().numpy().transpose(0, 2, 3, 1)

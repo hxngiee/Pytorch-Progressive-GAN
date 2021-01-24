@@ -57,13 +57,19 @@ def init_weights(net, init_type='normal', init_gain=0.02):
     net.apply(init_func)  # apply the initialization function <init_func>
 
 ## 네트워크 저장하기
-def save(ckpt_dir, netG, netD, optimG, optimD, epoch):
+def save(ckpt_dir, netG, netD, optimG, optimD, epoch, mode):
     if not os.path.exists(ckpt_dir):
         os.makedirs(ckpt_dir)
 
-    torch.save({'netG': netG.module.state_dict(), 'netD': netD.module.state_dict(),
-                'optimG': optimG.state_dict(), 'optimD': optimD.state_dict()},
-               "%s/model_epoch%d.pth.tar" % (ckpt_dir, epoch), _use_new_zipfile_serialization=False)
+    if mode == "train_single":
+        torch.save({'netG': netG.state_dict(), 'netD': netD.state_dict(),
+                    'optimG': optimG.state_dict(), 'optimD': optimD.state_dict()},
+                    "%s/model_epoch%d.pth.tar" % (ckpt_dir, epoch), _use_new_zipfile_serialization=False)
+
+    if mode == "train_multi":
+        torch.save({'netG': netG.module.state_dict(), 'netD': netD.module.state_dict(),
+                    'optimG': optimG.state_dict(), 'optimD': optimD.state_dict()},
+                    "%s/model_epoch%d.pth.tar" % (ckpt_dir, epoch), _use_new_zipfile_serialization=False)
 
 
 ## 네트워크 불러오기
@@ -82,9 +88,13 @@ def load(ckpt_dir, netG, netD, optimG, optimD, mode):
     dict_model = torch.load('%s/%s' % (ckpt_dir, ckpt_lst[-1]), map_location=device)
 
     # Train_continu 할 때
-    if mode == "train":
+    if mode == "train_single":
+        netG.load_state_dict(dict_model['netG'])
+        netD.load_state_dict(dict_model['netD'])
+    elif mode =="train_multi":
         netG.module.load_state_dict(dict_model['netG'])
         netD.module.load_state_dict(dict_model['netD'])
+
     # Test 할 때
     elif mode == "test":
         netG.load_state_dict(dict_model['netG'])

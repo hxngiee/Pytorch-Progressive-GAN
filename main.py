@@ -20,7 +20,7 @@ parser.add_argument('--rank', default=0, type=int, help='')
 parser.add_argument('--world_size', default=1, type=int, help='')
 parser.add_argument('--distributed', action='store_true', help='')
 
-parser.add_argument("--mode", default="train", choices=["train", "test"], type=str, dest="mode")
+parser.add_argument("--mode", default="train_single", choices=["train_single","train_multi", "test"], type=str, dest="mode")
 parser.add_argument("--train_continue", default="on", choices=["on", "off"], type=str, dest="train_continue")
 
 parser.add_argument("--lr", default=1e-3, type=float, dest="lr")
@@ -50,15 +50,19 @@ parser.add_argument("--learning_type", default="plain", choices=["plain", "resid
 
 args = parser.parse_args()
 
-if args.mode == "train":
-    gpu_devices = ','.join([str(id) for id in args.gpu_devices])
-    os.environ["CUDA_VISIBLE_DEVICES"] = gpu_devices
-
 if __name__ == "__main__":
 
-    if args.mode == "train":
+    if args.mode == "train_single":
+        train(0,1,args)
+
+    elif args.mode == "train_multi":
+
+        gpu_devices = ','.join([str(id) for id in args.gpu_devices])
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpu_devices
+
         ngpus_per_node = torch.cuda.device_count()
         args.world_size = ngpus_per_node * args.world_size
         mp.spawn(train, nprocs=ngpus_per_node, args=(ngpus_per_node, args))
+
     elif args.mode == "test":
         test(args)
