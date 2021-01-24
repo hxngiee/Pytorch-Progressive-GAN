@@ -37,11 +37,6 @@ def train(gpu, ngpus_per_node, args):
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
                             world_size=args.world_size, rank=args.rank)
 
-    ## PGGAN
-    n_label = 1
-    code_size = 512 - n_label
-    n_critic = 1 # 얘 지워도 되지 않나? ㅇㅇ
-
     ## 트레이닝 파라메터 설정하기
     mode = args.mode
     train_continue = args.train_continue
@@ -117,6 +112,11 @@ def train(gpu, ngpus_per_node, args):
                 loader_train = DataLoader(dataset_train, batch_size=batch_size,
                                           shuffle=(train_sampler is None), num_workers=num_workers,sampler=train_sampler)
 
+            global num_data_train
+            global num_batch_train
+            num_data_train = len(dataset_train)
+            num_batch_train = np.ceil(num_data_train / batch_size)
+
             return loader_train
 
         def sample_data(loader_train, image_size=4):
@@ -146,6 +146,11 @@ def train(gpu, ngpus_per_node, args):
 
     ## 네트워크 생성하기
     if network == "PGGAN":
+        ## PGGAN
+        n_label = 1
+        code_size = 512 - n_label
+        n_critic = 1  # 얘 지워도 되지 않나? ㅇㅇ
+
         print('==> Making model..')
         netG = PGGAN(code_size,n_label)
         netG_running = PGGAN(code_size,n_label)
@@ -275,35 +280,39 @@ def train(gpu, ngpus_per_node, args):
             loss.backward()
             optimG.step()
 
-
-            ###
-
-            accumulate(netG_running,netG)
+            accumulate(netG_running, netG)
             requires_grad(netG, False)
             requires_grad(netD, True)
+
+            ###
+            loss_G_train += [gen_loss_val.item()]
+            loss_D_train += [gen_loss_val.item()]
+            loss_grad_train += [gen_loss_val.item()]
+
+            print("TRAIN: EPOCH %04d / %04d | BATCH enumberator로 수정 필요 / %04d | "
+                  "GEN %.4f | DISC REAL: %.4f | DISC FAKE: %.4f" %
+                  # (epoch, num_epoch, batch, num_batch_train,
+                  (epoch, num_epoch, num_batch_train, np.mean(loss_G_train), np.mean(loss_D_train), np.mean(loss_grad_train)))
 
             ## save image
             if (epoch + 1) % 100 == 0:
                 images = []
                 for _ in range(5):
                     input_class = Variable(torch.zeros(10).long()).to(device)
-                    images.append(netG_running(Variable(torch.randn(n_label*10, code_size)).to(device),
-                                               input_class, step, alpha).data.cpu())
-                    utils.save_image(torch.cat(images,0),f'result/{str(epoch + 1).zfill(6)}.png',
-                                     nrow=n_label*10, normalize=True, range=(-1,1))
+                    images.append(netG_running(Variable(torch.randn(n_label*10, code_size)).to(device), input_class, step, alpha).data.cpu())
+                    utils.save_image(torch.cat(images,0),f'result/{str(epoch + 1).zfill(6)}.png',nrow=n_label*10, normalize=True, range=(-1,1))
+
+            writer_train.add_scalar('loss_G', np.mean(loss_G_train), epoch)
+            writer_train.add_scalar('loss_D_real', np.mean(loss_D_train), epoch)
+            writer_train.add_scalar('loss_D_fake', np.mean(loss_grad_train), epoch)
 
             ## model save
             if (epoch + 1) % 100 == 0:
-                # if not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank % ngpus_per_node == 0):
                 if args.rank == 0:
-                    save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, optimG=optimG, optimD=optimD, epoch=(epoch+1), mode=mode)
-                    # save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, epoch=(epoch+1))
+                    save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, optimG=optimG, optimD=optimD,
+                         epoch=(epoch + 1), mode=mode)
 
-                # save(ckpt_dir=ckpt_dir, netG=netG_running, netD=netD, optimG=optimG, optimD=optimD, epoch=(epoch+1))
-
-
-            print(f'{epoch + 1}; G: {gen_loss_val:.5f}; D: {gen_loss_val:.5f};'
-                 f' Grad: {gen_loss_val:.5f}; Alpha: {alpha:.3f}')
+        writer_train.close()
 
         elapse_time = time.time() - epoch_start
         elapse_time = datetime.timedelta(seconds=elapse_time)
@@ -415,17 +424,13 @@ def test(args):
             netG.eval()
 
             input_class = Variable(torch.zeros(10).long()).to(device)
-            output = netG(Variable(torch.randn(n_label*10, code_size)).to(device),input_class, step=2, alpha=1).data.cpu()
+            output = netG(Variable(torch.randn(n_label*10, code_size)).to(device),input_class, step=5, alpha=1).data.cpu()
+
+            images = []
+
+            for _ in range(5):
+                input_class = Variable(torch.zeros(10).long()).to(device)
+                images.append(netG(Variable(torch.randn(n_label * 10, code_size)).to(device), input_class, step=5, alpha=1).data.cpu())
+                utils.save_image(torch.cat(images, 0), f'result/{str(0).zfill(6)}.png', nrow=n_label * 10, normalize=True, range=(-1, 1))
 
             print("Success!!!!!!!!!!!!")
-
-            # output = fn_tonumpy(fn_denorm(output, mean=0.5, std=0.5))
-            #
-            # for j in range(output.shape[0]):
-            #     id = j
-            #
-            #     output_ = output[j]
-            #     np.save(os.path.join(result_dir_test, 'numpy', '%04d_output.npy' % id), output_)
-            #
-            #     output_ = np.clip(output_, a_min=0, a_max=1)
-            #     plt.imsave(os.path.join(result_dir_test, 'png', '%04d_output.png' % id), output_, cmap=cmap)
