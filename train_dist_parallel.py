@@ -129,8 +129,11 @@ def train(gpu, ngpus_per_node, args):
 
             loader_train = loader_train(transform)
 
-            for img, label in loader_train:
-                yield img, label
+            for batch, data in enumerate(loader_train,1):
+                yield batch, data
+
+            # for img, label in loader_train:
+            #     yield img, label
 
         def requires_grad(model, flag=True):
             for p in model.parameters():
@@ -242,10 +245,13 @@ def train(gpu, ngpus_per_node, args):
                     step = 5
                 dataset_train = sample_data(loader_train, 4 * 2 ** step)
             try:
-                real_image, label = next(dataset_train)
+                # real_image, label = next(dataset_train)
+                batch, data = next(dataset_train)
+                real_image, label = data[0], data[1]
             except:
-                dataset_train = sample_data(loader_train, 4 * 2 ** step)
-                real_image, label = next(dataset_train)
+                # real_image, label = next(dataset_train)
+                batch, data = next(dataset_train)
+                real_image, label = data[0], data[1]
             iteration += 1
 
 
@@ -289,10 +295,9 @@ def train(gpu, ngpus_per_node, args):
             loss_D_train += [gen_loss_val.item()]
             loss_grad_train += [gen_loss_val.item()]
 
-            print("TRAIN: EPOCH %04d / %04d | BATCH enumberator로 수정 필요 / %04d | "
+            print("TRAIN: EPOCH %04d / %04d | BATCH %04d / %04d | "
                   "GEN %.4f | DISC REAL: %.4f | DISC FAKE: %.4f" %
-                  # (epoch, num_epoch, batch, num_batch_train,
-                  (epoch, num_epoch, num_batch_train, np.mean(loss_G_train), np.mean(loss_D_train), np.mean(loss_grad_train)))
+                  (epoch, num_epoch, batch, num_batch_train, np.mean(loss_G_train), np.mean(loss_D_train), np.mean(loss_grad_train)))
 
             ## save image
             if (epoch + 1) % 100 == 0:
