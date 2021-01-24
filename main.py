@@ -56,7 +56,6 @@ if __name__ == "__main__":
         train(0,1,args)
 
     elif args.mode == "train_multi":
-
         gpu_devices = ','.join([str(id) for id in args.gpu_devices])
         os.environ["CUDA_VISIBLE_DEVICES"] = gpu_devices
 
