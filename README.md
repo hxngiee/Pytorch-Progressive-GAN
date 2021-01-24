@@ -15,7 +15,6 @@ python main.py --mode train_single --train_continue on
 ```
 python main.py --gpu_device 0 1 2 --mode train_multi --train_continue off
 python main.py --gpu_device 0 1 2 --mode train_multi --train_continue on
-
 ```
 ### test
 ```
