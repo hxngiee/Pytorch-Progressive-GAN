@@ -5,7 +5,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.utils.data.distributed
 
-from train_dist_parallel import *
+from train import *
 
 ## Parser 생성하기
 parser = argparse.ArgumentParser(description="PGGAN",

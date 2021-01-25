@@ -260,14 +260,31 @@ def train(gpu, ngpus_per_node, args):
             label = Variable(label).to(device)
             real_predict, real_class_predict = netD(real_image, step, alpha)
             real_predict = real_predict.mean() - 0.001 * (real_predict ** 2).mean()
-            # backward안에 값을 넣으면 어떻게 되지?
             real_predict.backward(mone)
 
-            fake_imgae = netG(Variable(torch.randn(b_size,code_size)).to(device),
+            fake_image = netG(Variable(torch.randn(b_size,code_size)).to(device),
                               label, step, alpha)
-            fake_predict, fake_class_predict = netD(fake_imgae, step, alpha)
+            fake_predict, fake_class_predict = netD(fake_image, step, alpha)
             fake_predict = fake_predict.mean()
             fake_predict.backward(one)
+
+
+            eps = torch.rand(b_size, 1, 1, 1).cuda()
+            x_hat = eps * real_image.data + (1 - eps) * fake_image.data
+            x_hat = Variable(x_hat, requires_grad=True)
+            hat_predict, _ = netD(x_hat, step, alpha)
+            grad_x_hat = grad(outputs=hat_predict.sum(), inputs=x_hat, create_graph=True)[0]
+
+
+            # grad_x_hat.mean().backward()
+
+
+            # grad_penalty = ((grad_x_hat.view(grad_x_hat.size(0), -1).norm(2, dim=1) - 1) ** 2).mean()
+            # grad_penalty = 10 * grad_penalty
+            # grad_penalty.backward()
+            # grad_loss_val = grad_penalty.data
+            # disc_loss_val = (real_predict - fake_predict).data
+
 
             optimD.step()
 
