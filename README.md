@@ -3,7 +3,7 @@ Multi GPU Training Code for GAN with Pytorch
 
 ## Ruqeirement 
 - Pytorch 1.7.0 +  
-  - Nipa 기준 pytorch 1.4 이전 버전 사용시 에러 발생
+  - pytorch 1.4 이전 버전 사용시 에러 발생
   
 ## Usage
 ### single gpu
