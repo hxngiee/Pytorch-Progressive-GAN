@@ -152,7 +152,7 @@ def train(gpu, ngpus_per_node, args):
         ## PGGAN
         n_label = 1
         code_size = 512 - n_label
-        n_critic = 1  # 얘 지워도 되지 않나? ㅇㅇ
+        n_critic = 1
 
         print('==> Making model..')
         netG = PGGAN(code_size,n_label)
@@ -268,27 +268,8 @@ def train(gpu, ngpus_per_node, args):
             fake_predict = fake_predict.mean()
             fake_predict.backward(one)
 
-
-            eps = torch.rand(b_size, 1, 1, 1).cuda()
-            x_hat = eps * real_image.data + (1 - eps) * fake_image.data
-            # single gpu 하면 어케 뜸?
-            # x_hat = Variable(x_hat, requires_grad=True)
-            # x_hat = Variable(x_hat, requires_grad=True).to(device)
-            x_hat = Variable(x_hat, requires_grad=True).to(device)
-            hat_predict, _ = netD(x_hat, step, alpha)
-            grad_x_hat = grad(outputs=hat_predict.sum(), inputs=x_hat,create_graph=True)[0]
-            print(grad_x_hat)
-            # add backward / gather backward
-            # grad_x_hat.mean().backward()
-
-            # grad_penalty = ((grad_x_hat.view(grad_x_hat.size(0), -1).norm(2, dim=1) - 1) ** 2).mean()
-            # grad_penalty = 10 * grad_penalty
-            # grad_penalty.backward()
-            # grad_loss_val = grad_penalty.data
-            # disc_loss_val = (real_predict - fake_predict).data
-
-
             optimD.step()
+
 
             ## train netG
             netG.zero_grad()
