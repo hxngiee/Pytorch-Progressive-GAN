@@ -21,4 +21,4 @@ python main.py --mode test
 grad_x_hat = grad(outputs=hat_predict.sum(), inputs=x_hat,create_graph=True)[0]
 grad_x_hat.backward()
 ```
-* [[link]](https://discuss.pytorch.org/t/gradient-penalty-in-wgan-gp-not-converging-on-multi-gpu/35528) `gradient penalty` in WGAN-GP not support on Multi-GPU training
+* `gradient penalty` in WGAN-GP not support on Multi-GPU training [[link]](https://discuss.pytorch.org/t/gradient-penalty-in-wgan-gp-not-converging-on-multi-gpu/35528) 
