@@ -444,4 +444,4 @@ def test(args):
                 images.append(netG(Variable(torch.randn(n_label * 10, code_size)).to(device), input_class, step=5, alpha=1).data.cpu())
                 utils.save_image(torch.cat(images, 0), f'result/{str(0).zfill(6)}.png', nrow=n_label * 10, normalize=True, range=(-1, 1))
 
-            print("Success!!!!!!!!!!!!")
+            print("Success!!!!!!!!!!!")
